@@ -1,6 +1,9 @@
 package mmdbcli
 
-import "github.com/koykov/indirect"
+import (
+	"github.com/koykov/indirect"
+	"github.com/koykov/simd/indextoken"
+)
 
 type Record struct {
 	cnptr    uintptr
@@ -12,7 +15,8 @@ func (r *Record) Get(path string) *Value {
 	if cn == nil {
 		return nil
 	}
-	return cn.lookup(r.off, path)
+	var t indextoken.Tokenizer[string]
+	return cn.lookup(r.off, path, &t)
 }
 
 func (r *Record) indirectConn() *conn {

@@ -17,3 +17,5 @@ type Value struct {
 	cnptr uintptr
 	off   uint64
 }
+
+var nullValue = &Value{}

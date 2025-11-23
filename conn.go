@@ -8,6 +8,9 @@ import (
 	"os"
 	"runtime"
 	"unsafe"
+
+	"github.com/koykov/byteconv"
+	"github.com/koykov/simd/indextoken"
 )
 
 const metaPrefix = "\xAB\xCD\xEFMaxMind.com"
@@ -155,17 +158,31 @@ func (c *conn) PGets(ctx context.Context, dst *Record, ip string) error {
 	return c.PGet(ctx, dst, ip_)
 }
 
-func (c *conn) lookup(off uint64, path string) *Value {
+func (c *conn) lookup(off uint64, path string, t *indextoken.Tokenizer[string]) *Value {
 	_, _ = off, path
-	ctrlb := c.bufm[off]
+	ctrlb := c.buf[off]
+	off++
 	etype := entryType(ctrlb >> 5)
 	size := ctrlb & 0x1f
 	if size == 0 {
 		return nil
 	}
-	// todo implement me
-	_ = etype
-	return nil
+	tkn := t.Next(path)
+	size1 := uint64(ctrlb & 0x1f)
+	key := byteconv.B2S(c.buf[off : off+size1])
+	if key != tkn {
+		return nullValue
+	}
+	off += size1
+	switch etype {
+	case entryString:
+		return &Value{typ: ValueString, cnptr: c.selfptr, off: off}
+	case entryMap:
+		//
+	default:
+		return nullValue
+	}
+	return nullValue
 }
 
 func (c *conn) Validate() error {
@@ -198,4 +215,8 @@ func (c *conn) getNode(off, bit uint64) (uint64, error) {
 	default:
 		return 0, ErrBadRecordSize
 	}
+}
+
+func (c *conn) ptr() uintptr {
+	return c.selfptr
 }
