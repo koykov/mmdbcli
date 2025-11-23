@@ -15,6 +15,6 @@ func TestConn(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Log(r) // todo parse me
+		t.Log(r.Get("country.iso_code")) // todo parse me
 	})
 }
