@@ -83,12 +83,21 @@ func connect(filePath string) (c *conn, err error) {
 		return nil, ErrBadRecordSize
 	}
 
+	treesz := cn.meta.nodec * cn.nodeoff
+	lo := treesz + 16
+	hi := uint64(i - len(metaPrefix))
+	if lo > hi {
+		return nil, ErrBadDB
+	}
+	cn.bufr = cn.buf[lo:hi]
+
 	c = cn
 	return
 }
 
 type conn struct {
 	buf      []byte
+	bufr     []byte
 	bufm     []byte
 	meta     Meta
 	nodeoff  uint64
@@ -161,13 +170,13 @@ func (c *conn) PGets(ctx context.Context, dst *Record, ip string) error {
 func (c *conn) lookup(off uint64, path string, t *indextoken.Tokenizer[string]) *Value {
 	_, _ = off, path
 	off++
-	ctrlb := c.buf[off]
+	ctrlb := c.bufr[off]
 	etype := entryType(ctrlb >> 5)
 	if etype == entryExtended {
-		if off > uint64(len(c.buf)) {
+		if off > uint64(len(c.bufr)) {
 			return nullValue
 		}
-		etype = entryType(c.buf[off] + 7)
+		etype = entryType(c.bufr[off] + 7)
 		off++
 	}
 	size := ctrlb & 0x1f
@@ -176,7 +185,7 @@ func (c *conn) lookup(off uint64, path string, t *indextoken.Tokenizer[string]) 
 	}
 	tkn := t.Next(path)
 	size1 := uint64(ctrlb & 0x1f)
-	key := byteconv.B2S(c.buf[off : off+size1])
+	key := byteconv.B2S(c.bufr[off : off+size1])
 	if key != tkn {
 		return nullValue
 	}
