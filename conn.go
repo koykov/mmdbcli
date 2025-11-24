@@ -160,9 +160,16 @@ func (c *conn) PGets(ctx context.Context, dst *Record, ip string) error {
 
 func (c *conn) lookup(off uint64, path string, t *indextoken.Tokenizer[string]) *Value {
 	_, _ = off, path
-	ctrlb := c.buf[off]
 	off++
+	ctrlb := c.buf[off]
 	etype := entryType(ctrlb >> 5)
+	if etype == entryExtended {
+		if off > uint64(len(c.buf)) {
+			return nullValue
+		}
+		etype = entryType(c.buf[off] + 7)
+		off++
+	}
 	size := ctrlb & 0x1f
 	if size == 0 {
 		return nil
