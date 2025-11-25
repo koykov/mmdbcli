@@ -169,8 +169,8 @@ func (c *conn) PGets(ctx context.Context, dst *Record, ip string) error {
 
 func (c *conn) lookup(off uint64, path string, t *indextoken.Tokenizer[string]) *Value {
 	_, _ = off, path
-	off++
 	ctrlb := c.bufr[off]
+	off++
 	etype := entryType(ctrlb >> 5)
 	if etype == entryExtended {
 		if off > uint64(len(c.bufr)) {
@@ -183,18 +183,21 @@ func (c *conn) lookup(off uint64, path string, t *indextoken.Tokenizer[string]) 
 	if size == 0 {
 		return nil
 	}
-	tkn := t.Next(path)
-	size1 := uint64(ctrlb & 0x1f)
-	key := byteconv.B2S(c.bufr[off : off+size1])
-	if key != tkn {
-		return nullValue
-	}
-	off += size1
 	switch etype {
 	case entryString:
-		return &Value{typ: ValueString, cnptr: c.selfptr, off: off}
+		tkn := t.Next(path)
+		if len(tkn) == 0 {
+			return &Value{typ: ValueString, cnptr: c.selfptr, off: off}
+		}
+		return nullValue
 	case entryMap:
-		//
+		tkn := t.Next(path)
+		size1 := uint64(ctrlb & 0x1f)
+		key := byteconv.B2S(c.bufr[off : off+size1])
+		if key != tkn {
+			return nullValue
+		}
+		off += size1
 	default:
 		return nullValue
 	}
