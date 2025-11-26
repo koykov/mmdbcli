@@ -192,7 +192,20 @@ func (c *conn) lookup(off uint64, path string, t *indextoken.Tokenizer[string]) 
 		return nullValue
 	case entryMap:
 		tkn := t.Next(path)
+		if len(tkn) == 0 {
+			return &Value{typ: ValueMap, cnptr: c.selfptr, off: off}
+		}
 		size1 := uint64(ctrlb & 0x1f)
+		var err error
+		for i := uint64(0); i < size1; i++ {
+			var key string
+			if off, err = decode(c.bufr, off, 0, 0, &key); err != nil {
+				continue
+			}
+			if key == tkn {
+				return &Value{} // todo return value
+			}
+		}
 		key := byteconv.B2S(c.bufr[off : off+size1])
 		if key != tkn {
 			return nullValue
