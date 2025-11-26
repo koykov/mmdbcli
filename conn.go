@@ -203,7 +203,13 @@ func (c *conn) lookup(off uint64, path string, t *indextoken.Tokenizer[string]) 
 				continue
 			}
 			if key == tkn {
-				return &Value{} // todo return value
+				ctrlb = c.bufr[off]
+				etype = entryType(ctrlb >> 5)
+				return &Value{
+					typ:   ValueType(etype), // todo map entryType -> ValueType
+					cnptr: c.ptr(),
+					off:   off,
+				}
 			}
 		}
 		key := byteconv.B2S(c.bufr[off : off+size1])
