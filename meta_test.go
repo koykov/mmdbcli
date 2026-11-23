@@ -1,6 +1,7 @@
 package mmdbcli
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -9,6 +10,7 @@ func TestMeta(t *testing.T) {
 	type meta struct {
 		fname  string
 		expect Meta
+		err    error
 	}
 	tcs := []meta{
 		{fname: "GeoIP2-Anonymous-IP-Test",
@@ -18,7 +20,7 @@ func TestMeta(t *testing.T) {
 		{fname: "GeoIP2-City-Test-Broken-Double-Format",
 			expect: Meta{desc: map[string]string{"en": "GeoIP2 City Test Broken Double Format Database (fake GeoIP2 data, for example purposes only)", "zh": "小型数据库"}, dbType: "GeoIP2-City", lang: []string{"en", "zh"}, bfmaj: 0x2, bfmin: 0x0, epoch: 0x651357b1, ipVer: 0x6, nodec: 0x5ff, recSize: 0x1c}},
 		{fname: "GeoIP2-City-Test-Invalid-Node-Count",
-			expect: Meta{desc: map[string]string{"en": "GeoIP2 City Test Invalid Node Count Database (fake GeoIP2 data, for example purposes only)", "zh": "小型数据库"}, dbType: "GeoIP2-City", lang: []string{"en", "zh"}, bfmaj: 0x2, bfmin: 0x0, epoch: 0x651357b1, ipVer: 0x6, nodec: 100000, recSize: 0x1c}},
+			err: ErrBadDB},
 		{fname: "GeoIP2-City-Test",
 			expect: Meta{desc: map[string]string{"en": "GeoIP2 City Test Database (fake GeoIP2 data, for example purposes only)", "zh": "小型数据库"}, dbType: "GeoIP2-City", lang: []string{"en", "zh"}, bfmaj: 0x2, bfmin: 0x0, epoch: 0x689b7e8d, ipVer: 0x6, nodec: 0x60b, recSize: 0x1c}},
 		{fname: "GeoIP2-Connection-Type-Test",
@@ -127,6 +129,12 @@ func TestMeta(t *testing.T) {
 		t.Run(tc.fname, func(t *testing.T) {
 			fpath := fmt.Sprintf("testdata/%s.mmdb", tc.fname)
 			cn, err := Connect(fpath)
+			if tc.err != nil {
+				if !errors.Is(tc.err, err) {
+					t.Error(err)
+				}
+				return
+			}
 			if err != nil {
 				t.Error(err)
 				return
