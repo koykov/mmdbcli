@@ -85,7 +85,7 @@ func connect(filePath string) (c *conn, err error) {
 
 	treesz := cn.meta.nodec * cn.nodeoff
 	lo := treesz + 16
-	hi := uint64(i - len(metaPrefix))
+	hi := uint64(i)
 	if lo > hi {
 		return nil, ErrBadDB
 	}
