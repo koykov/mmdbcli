@@ -1,9 +1,11 @@
 package mmdbcli
 
 import (
-	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMeta(t *testing.T) {
@@ -94,55 +96,17 @@ func TestMeta(t *testing.T) {
 		{fname: "MaxMind-DB-test-pointer-decoder",
 			expect: Meta{desc: map[string]string{"en": "MaxMind DB Decoder Test database - contains every MaxMind DB data type"}, dbType: "MaxMind DB Decoder Test", lang: []string{"en"}, bfmaj: 0x2, bfmin: 0x0, epoch: 0x651357b0, ipVer: 0x6, nodec: 0xbd, recSize: 0x18}},
 	}
-	metaeq := func(a, b *Meta) map[string]string {
-		diff := make(map[string]string)
-		if a.dbType != b.dbType {
-			diff["database_type"] = fmt.Sprintf("%s != %s", a.dbType, b.dbType)
-		}
-		if a.bfmaj != b.bfmaj {
-			diff["binary_format_major_version"] = fmt.Sprintf("%d != %d", a.bfmaj, b.bfmaj)
-		}
-		if a.bfmin != b.bfmin {
-			diff["binary_format_minor_version"] = fmt.Sprintf("%d != %d", a.bfmin, b.bfmin)
-		}
-		if a.epoch != b.epoch {
-			diff["build_epoch"] = fmt.Sprintf("%d != %d", a.epoch, b.epoch)
-		}
-		if a.ipVer != b.ipVer {
-			diff["ip_version"] = fmt.Sprintf("%d != %d", a.ipVer, b.ipVer)
-		}
-		if a.recSize != b.recSize {
-			diff["record_size"] = fmt.Sprintf("%d != %d", a.recSize, b.recSize)
-		}
-		if a.nodec != b.nodec {
-			diff["node_count"] = fmt.Sprintf("%d != %d", a.nodec, b.nodec)
-		}
-		if descA, descB := fmt.Sprintf("%v", a.desc), fmt.Sprintf("%v", b.desc); descA != descB {
-			diff["description"] = fmt.Sprintf("%v != %v", descA, descB)
-		}
-		if langA, langB := fmt.Sprintf("%v", a.lang), fmt.Sprintf("%v", b.lang); langA != langB {
-			diff["languages"] = fmt.Sprintf("%v != %v", langA, langB)
-		}
-		return diff
-	}
 	for _, tc := range tcs {
 		t.Run(tc.fname, func(t *testing.T) {
 			fpath := fmt.Sprintf("testdata/%s.mmdb", tc.fname)
 			cn, err := Connect(fpath)
 			if tc.err != nil {
-				if !errors.Is(tc.err, err) {
-					t.Error(err)
-				}
+				require.ErrorIs(t, err, tc.err, "Connect(%s)", tc.fname)
 				return
 			}
-			if err != nil {
-				t.Error(err)
-				return
-			}
+			require.NoError(t, err, "Connect(%s)", tc.fname)
 			defer func() { _ = cn.Close() }()
-			if diff := metaeq(cn.Meta(), &tc.expect); len(diff) > 0 {
-				t.Error(diff)
-			}
+			assert.Equal(t, &tc.expect, cn.Meta(), "Meta(%s)", tc.fname)
 		})
 	}
 }

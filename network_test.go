@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestEachNetwork(t *testing.T) {
@@ -26,9 +29,7 @@ func TestEachNetwork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cn, err := Connect(fmt.Sprintf("testdata/%s.mmdb", tt.fname))
-			if err != nil {
-				t.Fatalf("Connect(%s): %v", tt.fname, err)
-			}
+			require.NoError(t, err, "Connect(%s)", tt.fname)
 			defer func() { _ = cn.Close() }()
 
 			count := 0
@@ -36,12 +37,8 @@ func TestEachNetwork(t *testing.T) {
 				count++
 				return nil
 			})
-			if err != nil {
-				t.Errorf("EachNetwork(%s): unexpected error: %v", tt.fname, err)
-			}
-			if count != tt.expect {
-				t.Errorf("EachNetwork(%s): callback count = %d, want %d", tt.fname, count, tt.expect)
-			}
+			assert.NoError(t, err, "EachNetwork(%s)", tt.fname)
+			assert.Equal(t, tt.expect, count, "EachNetwork(%s): callback count", tt.fname)
 		})
 	}
 }
@@ -64,9 +61,7 @@ func TestEachNetworkWithOptions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cn, err := Connect(fmt.Sprintf("testdata/%s.mmdb", tt.fname))
-			if err != nil {
-				t.Fatalf("Connect(%s): %v", tt.fname, err)
-			}
+			require.NoError(t, err, "Connect(%s)", tt.fname)
 			defer func() { _ = cn.Close() }()
 
 			count := 0
@@ -74,12 +69,8 @@ func TestEachNetworkWithOptions(t *testing.T) {
 				count++
 				return nil
 			}, tt.options)
-			if err != nil {
-				t.Errorf("EachNetworkWithOptions(%s, %d): unexpected error: %v", tt.fname, tt.options, err)
-			}
-			if count != tt.expect {
-				t.Errorf("EachNetworkWithOptions(%s, %d): callback count = %d, want %d", tt.fname, tt.options, count, tt.expect)
-			}
+			assert.NoError(t, err, "EachNetworkWithOptions(%s, %d)", tt.fname, tt.options)
+			assert.Equal(t, tt.expect, count, "EachNetworkWithOptions(%s, %d): callback count", tt.fname, tt.options)
 		})
 	}
 }
@@ -88,9 +79,7 @@ func TestEachNetworkCallbackError(t *testing.T) {
 	var errNetworkStop = errors.New("stop iteration")
 
 	cn, err := Connect("testdata/MaxMind-DB-test-ipv4-24.mmdb")
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
+	require.NoError(t, err, "Connect")
 	defer func() { _ = cn.Close() }()
 
 	calls := 0
@@ -101,19 +90,13 @@ func TestEachNetworkCallbackError(t *testing.T) {
 		}
 		return nil
 	})
-	if !errors.Is(err, errNetworkStop) {
-		t.Errorf("EachNetwork: err = %v, want errors.Is(err, errNetworkStop)", err)
-	}
-	if calls != 2 {
-		t.Errorf("EachNetwork: callback invoked %d times, want 2 (iteration must stop immediately)", calls)
-	}
+	require.ErrorIs(t, err, errNetworkStop, "EachNetwork: err")
+	assert.Equal(t, 2, calls, "EachNetwork: callback must stop immediately")
 }
 
 func TestEachNetworkContextCancel(t *testing.T) {
 	cn, err := Connect("testdata/MaxMind-DB-test-ipv4-24.mmdb")
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
+	require.NoError(t, err, "Connect")
 	defer func() { _ = cn.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,16 +105,12 @@ func TestEachNetworkContextCancel(t *testing.T) {
 	err = cn.EachNetwork(ctx, func(*Record) error {
 		return nil
 	})
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("EachNetwork with cancelled context: err = %v, want context.Canceled", err)
-	}
+	require.ErrorIs(t, err, context.Canceled, "EachNetwork with cancelled context: err")
 }
 
 func TestEachNetworkIncludeEmpty(t *testing.T) {
 	cn, err := Connect("testdata/MaxMind-DB-test-mixed-24.mmdb")
-	if err != nil {
-		t.Fatalf("Connect: %v", err)
-	}
+	require.NoError(t, err, "Connect")
 	defer func() { _ = cn.Close() }()
 
 	count := 0
@@ -139,11 +118,7 @@ func TestEachNetworkIncludeEmpty(t *testing.T) {
 		count++
 		return nil
 	}, NetworkOptionIncludeEmptyNetwork)
-	if err != nil {
-		t.Errorf("EachNetworkWithOptions(IncludeEmptyNetwork): unexpected error: %v", err)
-	}
+	assert.NoError(t, err, "EachNetworkWithOptions(IncludeEmptyNetwork)")
 	// Provisional lower-bound check: no exact expectation exists until a prefix-scoped walk lands.
-	if count <= 11 {
-		t.Errorf("EachNetworkWithOptions(IncludeEmptyNetwork): callback count = %d, want > 11", count)
-	}
+	assert.Greater(t, count, 11, "EachNetworkWithOptions(IncludeEmptyNetwork): callback count")
 }
