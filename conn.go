@@ -136,7 +136,15 @@ func (c *conn) PGet(ctx context.Context, dst *Record, ip netip.Addr) error {
 	if err != nil {
 		return err
 	}
+	var addr [16]byte
+	if ip.Is4() {
+		b := ip.As4()
+		addr = [16]byte{12: b[0], 13: b[1], 14: b[2], 15: b[3]}
+	} else {
+		addr = ip.As16()
+	}
 	if node == c.meta.nodec {
+		*dst = Record{cnptr: c.ptr(), off: offNotFound, pfx: pfx, addr: addr}
 		return nil // empty node
 	}
 	if node < c.meta.nodec {
@@ -152,6 +160,7 @@ func (c *conn) PGet(ctx context.Context, dst *Record, ip netip.Addr) error {
 		return ErrBadDB
 	}
 
+	dst.addr = addr
 	dst.cnptr = c.selfptr
 	dst.off = node
 	dst.pfx = pfx
