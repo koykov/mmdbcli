@@ -1,16 +1,13 @@
 package mmdbcli
 
-import (
-	"context"
-	"net/netip"
-)
+import "context"
 
 type NetworkOption uint64
 
 const (
 	NetworkOptionIncludeAliased NetworkOption = 1 << iota
 	NetworkOptionIncludeEmptyNetwork
-	NetworkOptionSkipEmptyTuple
+	NetworkOptionSkipEmptyTuple // no-op until value decoding lands
 )
 
 const (
@@ -18,79 +15,82 @@ const (
 	NetworkOptionAll                     = NetworkOptionIncludeAliased | NetworkOptionIncludeEmptyNetwork | NetworkOptionSkipEmptyTuple
 )
 
+// EachNetwork calls fn for every network; the argument is valid only for the duration of the callback, copy it to retain.
 func (c *conn) EachNetwork(ctx context.Context, fn func(*Record) error) error {
 	return c.EachNetworkWithOptions(ctx, fn, NetworkOptionNoOptions)
 }
 
+// EachNetworkWithOptions calls fn for every selected network; the argument is valid only for the duration of the callback, copy it to retain.
 func (c *conn) EachNetworkWithOptions(ctx context.Context, fn func(*Record) error, options NetworkOption) error {
-	pfx := allpfx[c.meta.ipVer]
-	if !pfx.IsValid() {
-		return ErrInvalidPrefix
+	var startBit uint64
+	if c.meta.ipVer == 4 {
+		startBit = 96 // IPv4 tree is rooted at ::/96
 	}
-	if c.meta.ipVer == 4 && pfx.Addr().Is6() {
-		return ErrOverflowPrefix
-	}
-
-	addrRaw, bits := pfx.Addr(), pfx.Bits()
-	addr := addrRaw
-	if addrRaw.Is4() {
-		raw := addrRaw.As4()
-		var raw6 [16]byte
-		copy(raw6[12:], raw[:])
-		addrRaw = netip.AddrFrom16(raw6)
-		bits += 96
-	}
-	if bits > 128 {
-		return ErrOverflowIPv6
-	}
-
-	root, bit, err := c.traverse(ctx, &addrRaw, 0, bits)
-	if err != nil {
-		return err
-	}
-	if pfx, err = addr.Prefix(int(bit)); err != nil {
-		return err
-	}
-
-	pfxAddr := pfx.Addr()
-	if err = c.netwalk(ctx, root, &pfxAddr, fn, options, 0); err != nil {
-		return err
-	}
-
-	return nil
+	return c.netwalk(ctx, fn, 0, startBit, options)
 }
 
-func (c *conn) netwalk(ctx context.Context, root uint64, addr *netip.Addr, fn func(*Record) error, options NetworkOption, depth int) error {
+func (c *conn) netwalk(ctx context.Context, fn func(*Record) error, root, depth uint64, options NetworkOption) error {
+	const maxBits = 128
+	stack := netstkack()
+	defer netstkrel(stack)
+	cur := netstknode{node: root, depth: depth}
+	var rec Record
 	for {
-		if root == c.meta.nodec {
-			if options&NetworkOptionIncludeEmptyNetwork != 0 {
-				_ = fn(&Record{})
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// Aliased subtrees point back to the IPv4 tree; keep only the copy reached through ::/96.
+		skip := options&NetworkOptionIncludeAliased == 0 &&
+			c.meta.ipVer == 6 && c.ipv4off != 0 && c.ipv4off < c.meta.nodec &&
+			cur.node == c.ipv4off && !inIPv4(cur.addr)
+		switch {
+		case !skip && cur.node < c.meta.nodec:
+			if cur.depth >= maxBits {
+				return ErrBadDB
 			}
-			break
+			off := cur.node * c.nodeoff
+			left, err := c.getNode(off, 0)
+			if err != nil {
+				return err
+			}
+			right, err := c.getNode(off, 1)
+			if err != nil {
+				return err
+			}
+			raddr := cur.addr
+			raddr[cur.depth>>3] |= 1 << (7 - cur.depth&7)
+			stack.push(netstknode{node: right, addr: raddr, depth: cur.depth + 1})
+			cur.node, cur.depth = left, cur.depth+1
+			continue
+		case !skip && cur.node > c.meta.nodec:
+			off := cur.node - (c.meta.nodec + 16)
+			if off >= uint64(len(c.bufr)) {
+				return ErrBadDB
+			}
+			rec = Record{cnptr: c.ptr(), off: off, pfx: cur.depth, addr: cur.addr}
+			if err := fn(&rec); err != nil {
+				return err
+			}
+		case !skip && cur.node == c.meta.nodec && options&NetworkOptionIncludeEmptyNetwork != 0:
+			rec = Record{cnptr: c.ptr(), off: offNotFound, pfx: cur.depth, addr: cur.addr}
+			if err := fn(&rec); err != nil {
+				return err
+			}
 		}
-		if root == c.ipv4off && options&NetworkOptionIncludeAliased == 0 && !addr.Is4() {
-			break
+		if stack.len() == 0 {
+			return nil
 		}
-		if root > c.meta.nodec {
-			// todo complete me
+		cur = stack.pop()
+	}
+}
+
+func inIPv4(a [16]byte) bool {
+	for _, b := range a[:12] {
+		if b != 0 {
+			return false
 		}
 	}
-	return nil
-}
-
-func (c *conn) eachNetwork(ctx context.Context, addr *netip.Addr, bits int, fn func(*Record) error, options NetworkOption) error {
-	// todo implement me
-	return nil
-}
-
-var allpfx = [7]netip.Prefix{
-	{},
-	{},
-	{},
-	{},
-	netip.MustParsePrefix("0.0.0.0/0"),
-	{},
-	netip.MustParsePrefix("::/0"),
+	return true
 }
 
 var _ = NetworkOptionAll
