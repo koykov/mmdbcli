@@ -345,3 +345,30 @@ func TestPrefix(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkEachNetwork(b *testing.B) {
+	tests := []struct {
+		name    string
+		fname   string
+		options NetworkOption
+	}{
+		{name: "ipv4-24", fname: "MaxMind-DB-test-ipv4-24", options: NetworkOptionNoOptions},
+		{name: "ipv6-24", fname: "MaxMind-DB-test-ipv6-24", options: NetworkOptionNoOptions},
+		{name: "mixed-24", fname: "MaxMind-DB-test-mixed-24", options: NetworkOptionNoOptions},
+		{name: "mixed-24-include-empty", fname: "MaxMind-DB-test-mixed-24", options: NetworkOptionIncludeEmptyNetwork},
+		{name: "mixed-24-include-aliased", fname: "MaxMind-DB-test-mixed-24", options: NetworkOptionIncludeAliased},
+		{name: "geoip2-city", fname: "GeoIP2-City-Test", options: NetworkOptionNoOptions},
+	}
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			cn, err := Connect(fmt.Sprintf("testdata/%s.mmdb", tt.fname))
+			require.NoError(b, err, "Connect(%s)", tt.fname)
+			defer func() { _ = cn.Close() }()
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				_ = cn.EachNetworkWithOptions(context.Background(), func(*Record) error { return nil }, tt.options)
+			}
+		})
+	}
+}
